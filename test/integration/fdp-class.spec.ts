@@ -237,16 +237,20 @@ describe('Fair Data Protocol class', () => {
 
     it('should receive shared pod info', async () => {
       const fdp = createFdp()
+      const fdp1 = createFdp()
       const user = generateUser(fdp)
 
       const podName = generateRandomHexString()
       await fdp.personalStorage.create(podName)
       const sharedReference = await fdp.personalStorage.share(podName)
       const sharedData = await fdp.personalStorage.getSharedInfo(sharedReference)
-
       expect(sharedData.pod_name).toEqual(podName)
       expect(sharedData.pod_address).toHaveLength(40)
       expect(sharedData.user_address).toEqual(user.address.toLowerCase().replace('0x', ''))
+
+      // get shared data without authentication
+      const sharedData1 = await fdp1.personalStorage.getSharedInfo(sharedReference)
+      expect(sharedData1).toStrictEqual(sharedData)
     })
 
     it('should save shared pod', async () => {
@@ -435,6 +439,7 @@ describe('Fair Data Protocol class', () => {
 
     it('should receive information about shared file', async () => {
       const fdp = createFdp()
+      const fdpNoAuth = createFdp()
       generateUser(fdp)
       const pod = generateRandomHexString()
       const fileSizeSmall = 100
@@ -447,13 +452,59 @@ describe('Fair Data Protocol class', () => {
 
       const sharedReference = await fdp.file.share(pod, fullFilenameSmallPath)
       const sharedData = await fdp.file.getSharedInfo(sharedReference)
+      const sharedData1 = await fdpNoAuth.file.getSharedInfo(sharedReference)
 
+      expect(sharedData).toStrictEqual(sharedData1)
       expect(sharedData.meta).toBeDefined()
       expect(sharedData.meta.pod_name).toEqual(pod)
       expect(sharedData.meta.file_path).toEqual('/')
       expect(sharedData.meta.file_name).toEqual(filenameSmall)
       expect(sharedData.meta.file_size).toEqual(fileSizeSmall)
       expect(sharedData.source_address).toHaveLength(40)
+    })
+
+    it('should download shared file without authentication', async () => {
+      const fdp = createFdp()
+      const fdpNoAuth = createFdp()
+      generateUser(fdp)
+      const pod = generateRandomHexString()
+      const fileSizeSmall = 100
+      const contentSmall = generateRandomHexString(fileSizeSmall)
+      const filenameSmall = generateRandomHexString() + '.txt'
+      const fullFilenameSmallPath = '/' + filenameSmall
+
+      await fdp.personalStorage.create(pod)
+      await fdp.file.uploadData(pod, fullFilenameSmallPath, contentSmall)
+      const sharedReference = await fdp.file.share(pod, fullFilenameSmallPath)
+
+      const data = await fdpNoAuth.file.downloadShared(sharedReference)
+      expect(data.text()).toEqual(contentSmall)
+    })
+
+    it('should download file from shared pod without authentication', async () => {
+      const fdp = createFdp()
+      const fdpNoAuth = createFdp()
+      generateUser(fdp)
+      const pod = generateRandomHexString()
+      const fileSizeSmall = 100
+      const contentSmall = generateRandomHexString(fileSizeSmall)
+      const contentSmall2 = generateRandomHexString(fileSizeSmall)
+      const fullFilenameSmallPath = `/${generateRandomHexString()}.txt`
+      const subDirectory = `/${generateRandomHexString()}`
+      const fullNameWithSubDirectory = `${subDirectory}/${generateRandomHexString()}.txt`
+
+      await fdp.personalStorage.create(pod)
+      await fdp.file.uploadData(pod, fullFilenameSmallPath, contentSmall)
+      await fdp.directory.create(pod, subDirectory)
+      await fdp.file.uploadData(pod, fullNameWithSubDirectory, contentSmall2)
+
+      const sharedReference = await fdp.personalStorage.share(pod)
+
+      const data = await fdpNoAuth.file.downloadFromSharedPod(sharedReference, fullFilenameSmallPath)
+      expect(data.text()).toEqual(contentSmall)
+
+      const data2 = await fdpNoAuth.file.downloadFromSharedPod(sharedReference, fullNameWithSubDirectory)
+      expect(data2.text()).toEqual(contentSmall2)
     })
 
     it('should save shared file to a pod', async () => {

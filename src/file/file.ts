@@ -1,8 +1,8 @@
 import { FileMetadata } from '../pod/types'
 import { assertAccount } from '../account/utils'
-import { assertPodName, getExtendedPodsListByAccountData, META_VERSION } from '../pod/utils'
+import { assertPodName, getExtendedPodsListByAccountData, getSharedPodInfo, META_VERSION } from '../pod/utils'
 import { getUnixTimestamp } from '../utils/time'
-import { stringToBytes } from '../utils/bytes'
+import { stringToBytes, wrapBytesWithHelpers } from '../utils/bytes'
 import { AccountData } from '../account/account-data'
 import {
   assertFullPathWithName,
@@ -21,6 +21,7 @@ import { Data, Reference } from '@ethersphere/bee-js'
 import { getRawMetadata } from '../content-items/utils'
 import { assertRawFileMetadata, combine } from '../directory/utils'
 import { assertEncryptedReference, EncryptedReference } from '../utils/hex'
+import { prepareEthAddress } from '../utils/address'
 
 /**
  * Files management class
@@ -161,12 +162,13 @@ export class File {
   /**
    * Gets shared file information
    *
-   * @param reference swarm reference with shared file information
+   * Can be executed without authentication
+   *
+   * @param reference encrypted swarm reference with shared file information
    *
    * @returns shared file information
    */
   async getSharedInfo(reference: string | EncryptedReference): Promise<FileShareInfo> {
-    assertAccount(this.accountData)
     assertEncryptedReference(reference)
 
     return getSharedFileInfo(this.accountData.connection.bee, reference)
@@ -177,7 +179,7 @@ export class File {
    *
    * @param podName pod where file is stored
    * @param parentPath the path to the file to save
-   * @param reference swarm reference with shared file information
+   * @param reference encrypted swarm reference with shared file information
    * @param options save options
    *
    * @returns saved file metadata
@@ -189,6 +191,7 @@ export class File {
     options?: FileReceiveOptions,
   ): Promise<FileMetadata> {
     assertPodName(podName)
+
     const sharedInfo = await this.getSharedInfo(reference)
     const connection = this.accountData.connection
     const extendedInfo = await getExtendedPodsListByAccountData(this.accountData, podName)
@@ -200,5 +203,46 @@ export class File {
     await writeFeedData(connection, fullPath, getFileMetadataRawBytes(meta), extendedInfo.podWallet.privateKey)
 
     return meta
+  }
+
+  /**
+   * Downloads shared file
+   *
+   * Can be executed without authentication
+   *
+   * @param fileReference encrypted swarm reference with shared file information
+   */
+  async downloadShared(fileReference: string | EncryptedReference): Promise<Data> {
+    const info = await this.getSharedInfo(fileReference)
+    const data = await downloadData(
+      this.accountData.connection.bee,
+      combine(info.meta.file_path, info.meta.file_name),
+      prepareEthAddress(info.source_address),
+      this.accountData.connection.options?.downloadOptions,
+    )
+
+    return wrapBytesWithHelpers(data)
+  }
+
+  /**
+   * Downloads file from a shared pod
+   *
+   * Can be executed without authentication
+   *
+   * @param podReference encrypted swarm reference with shared pod information
+   * @param fullPath full path of the file to download
+   */
+  async downloadFromSharedPod(podReference: string | EncryptedReference, fullPath: string): Promise<Data> {
+    assertEncryptedReference(podReference)
+
+    const info = await getSharedPodInfo(this.accountData.connection.bee, podReference)
+    const data = await downloadData(
+      this.accountData.connection.bee,
+      fullPath,
+      prepareEthAddress(info.pod_address),
+      this.accountData.connection.options?.downloadOptions,
+    )
+
+    return wrapBytesWithHelpers(data)
   }
 }
