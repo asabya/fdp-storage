@@ -76,7 +76,6 @@ export class File {
     data = typeof data === 'string' ? stringToBytes(data) : data
     const connection = this.accountData.connection
     const extendedInfo = await getExtendedPodsListByAccountData(this.accountData, podName)
-
     const pathInfo = extractPathInfo(fullPath)
     const now = getUnixTimestamp()
     const blocksCount = Math.ceil(data.length / options.blockSize)
@@ -148,10 +147,8 @@ export class File {
     assertAccount(this.accountData)
     assertFullPathWithName(fullPath)
     assertPodName(podName)
-
     const connection = this.accountData.connection
     const extendedInfo = await getExtendedPodsListByAccountData(this.accountData, podName)
-
     const meta = (await getRawMetadata(connection.bee, fullPath, extendedInfo.podAddress)).metadata
     assertRawFileMetadata(meta)
     const data = stringToBytes(JSON.stringify(createFileShareInfo(meta, extendedInfo.podAddress)))
@@ -191,7 +188,6 @@ export class File {
     options?: FileReceiveOptions,
   ): Promise<FileMetadata> {
     assertPodName(podName)
-
     const sharedInfo = await this.getSharedInfo(reference)
     const connection = this.accountData.connection
     const extendedInfo = await getExtendedPodsListByAccountData(this.accountData, podName)
@@ -234,7 +230,6 @@ export class File {
    */
   async downloadFromSharedPod(podReference: string | EncryptedReference, fullPath: string): Promise<Data> {
     assertEncryptedReference(podReference)
-
     const info = await getSharedPodInfo(this.accountData.connection.bee, podReference)
     const data = await downloadData(
       this.accountData.connection.bee,
