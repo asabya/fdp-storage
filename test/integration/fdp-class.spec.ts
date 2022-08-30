@@ -1,11 +1,13 @@
-import { FdpStorage } from '../../src'
+import { FdpContracts, FdpStorage } from '../../src'
 import {
   createFdp,
   createUsableBatch,
   generateRandomHexString,
   generateUser,
   GET_FEED_DATA_TIMEOUT,
+  getCachedBatchId,
   isUsableBatchExists,
+  setCachedBatchId,
 } from '../utils'
 import { MAX_POD_NAME_LENGTH } from '../../src/pod/utils'
 import { createUserV1 } from '../../src/account/account'
@@ -18,7 +20,7 @@ async function topUpAddress(fdp: FdpStorage) {
   }
 
   const account = (await fdp.ens.provider.listAccounts())[0]
-  await fdp.ens.provider.send('eth_sendTransaction', [
+  const txHash = await fdp.ens.provider.send('eth_sendTransaction', [
     {
       from: account,
       to: fdp.account.wallet!.address,
@@ -26,29 +28,32 @@ async function topUpAddress(fdp: FdpStorage) {
     },
   ])
 
-  await fdp.ens.provider.send('evm_mine', [1])
+  await fdp.ens.provider.waitForTransaction(txHash)
 }
 
 jest.setTimeout(200000)
 describe('Fair Data Protocol class', () => {
   beforeAll(async () => {
-    await createUsableBatch()
+    const batchId = await createUsableBatch()
+    setCachedBatchId(batchId)
   })
 
   it('should strip trailing slash', () => {
-    const fdp = new FdpStorage('http://localhost:1633/', 'http://localhost:1635/', {
+    const fdp = new FdpStorage('http://localhost:1633/', getCachedBatchId(), {
       downloadOptions: {
         timeout: GET_FEED_DATA_TIMEOUT,
       },
     })
     expect(fdp.connection.bee.url).toEqual('http://localhost:1633')
-    expect(fdp.connection.beeDebug.url).toEqual('http://localhost:1635')
   })
 
   it('check default batch usability', async () => {
-    const fdp = createFdp()
+    expect(await isUsableBatchExists()).toBe(true)
+  })
 
-    expect(await isUsableBatchExists(fdp.connection.beeDebug)).toBe(true)
+  it('fdp-contracts is not empty', async () => {
+    expect(FdpContracts).toBeDefined()
+    expect(FdpContracts.ENS).toBeDefined()
   })
 
   describe('Registration', () => {
@@ -65,7 +70,6 @@ describe('Fair Data Protocol class', () => {
 
     it('should fail on zero balance', async () => {
       const fdp = createFdp()
-
       const user = generateUser(fdp)
 
       await expect(fdp.account.register(user.username, user.password)).rejects.toThrow('Not enough funds')
